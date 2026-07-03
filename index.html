@@ -101,6 +101,7 @@
     const KEY = 'sb_publishable_F5DJjPxXtl22rOV5RKowWA_Dxmg_UB3';
     let currentUser = "";
 
+    // Evita romper el filtro PostgREST y evita inyectar HTML/JS al insertar datos con innerHTML.
     function escaparHTML(valor) {
         const div = document.createElement('div');
         div.textContent = valor ?? '';
@@ -138,6 +139,12 @@
                         <b>${escaparHTML(t.nombre)}</b><br>
                         <span>Asignado: ${escaparHTML(t.turno)} | Estado: ${escaparHTML(t.estado)}</span><br>
                         ${t.estado === 'hecha' ? `<button class="btn" style="background:#f59e0b" data-accion="verificar" data-id="${t.id}" data-turno="${escaparHTML(t.turno)}" data-nombre="${escaparHTML(t.nombre)}">Verificar</button>` : ''}
+                        <div style="display:flex; gap:8px; margin-top:8px;">
+                            <select data-reasignar-select="${t.id}" style="margin-top:0;">
+                                ${USUARIOS_ROTACION.map(u => `<option value="${u}" ${u === t.turno ? 'selected' : ''}>${u}</option>`).join('')}
+                            </select>
+                            <button class="btn" style="background:#64748b; margin-top:0; width:auto; padding:10px 16px;" data-accion="reasignar" data-id="${t.id}">Reasignar</button>
+                        </div>
                     </div>
                 `).join('');
             asignarEventosLista();
@@ -175,6 +182,7 @@
         asignarEventosLista();
     }
 
+    // Delegación de eventos: evita interpolar datos del usuario dentro de atributos onclick (frágil ante comillas e inyectable).
     function asignarEventosLista() {
         document.querySelectorAll('#lista [data-accion="marcarHecha"]').forEach(btn => {
             btn.addEventListener('click', () => marcarHecha(btn.dataset.id));
@@ -182,6 +190,24 @@
         document.querySelectorAll('#lista [data-accion="verificar"]').forEach(btn => {
             btn.addEventListener('click', () => verificar(btn.dataset.id, btn.dataset.turno, btn.dataset.nombre));
         });
+        document.querySelectorAll('#lista [data-accion="reasignar"]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const select = document.querySelector(`[data-reasignar-select="${btn.dataset.id}"]`);
+                reasignarTarea(btn.dataset.id, select.value);
+            });
+        });
+    }
+
+    // Solo el Gestor tiene acceso a este control desde la UI (areaGestor).
+    // Al reasignar, la tarea vuelve a 'pendiente': el nuevo usuario no ha hecho nada todavía,
+    // así que no tendría sentido que apareciera como 'hecha' en su lista.
+    async function reasignarTarea(id, nuevoTurno) {
+        await fetch(`${URL}/tareas?id=eq.${id}`, {
+            method: 'PATCH',
+            headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ turno: nuevoTurno, estado: 'pendiente' })
+        });
+        cargarTareas();
     }
 
     async function marcarHecha(id) {
@@ -201,6 +227,7 @@
 
     async function verificar(id, turno, nombre) {
         try {
+            // 1. Guardar en historial con formato seguro
             const resHistorial = await fetch(`${URL}/historial`, {
                 method: 'POST',
                 headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}`, 'Content-Type': 'application/json' },
@@ -211,19 +238,30 @@
                 })
             });
 
-            if (!resHistorial.ok) throw new Error("Error guardando historial");
+            if (!resHistorial.ok) {
+                const errorBody = await resHistorial.json();
+                console.error("Detalle Supabase (historial):", errorBody);
+                throw new Error(errorBody.message || "Error guardando historial");
+            }
 
+            // 2. Reasignar la tarea automáticamente al otro usuario y volver a 'pendiente'
             const nuevoUsuario = obtenerOtroUsuario(turno);
-            await fetch(`${URL}/tareas?id=eq.${id}`, {
+            const resTarea = await fetch(`${URL}/tareas?id=eq.${id}`, {
                 method: 'PATCH',
                 headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ estado: 'pendiente', turno: nuevoUsuario })
             });
             
+            if (!resTarea.ok) {
+                const errorBody = await resTarea.json();
+                console.error("Detalle Supabase (tareas):", errorBody);
+                throw new Error(errorBody.message || "Error actualizando tarea");
+            }
+            
             cargarTareas();
         } catch (e) {
             console.error(e);
-            alert("Error al verificar.");
+            alert("Error al verificar. Revisa los permisos de la tabla historial.");
         }
     }
 
@@ -299,29 +337,11 @@
             alert("Escribe un nombre de tarea antes de crearla.");
             return;
         }
-
-        // --- Modificación solicitada: Verificar si existe antes de crear ---
-        const resExistente = await fetch(`${URL}/tareas?nombre=eq.${encodeURIComponent(nombre)}&select=id`, { 
-            headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}` } 
+        await fetch(`${URL}/tareas`, {
+            method: 'POST',
+            headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+            body: JSON.stringify({ nombre: nombre, turno: turno, estado: 'pendiente' })
         });
-        const tareasExistentes = await resExistente.json();
-
-        if (tareasExistentes.length > 0) {
-            // Actualiza la existente en lugar de crear una nueva
-            await fetch(`${URL}/tareas?id=eq.${tareasExistentes[0].id}`, {
-                method: 'PATCH',
-                headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ turno: turno, estado: 'pendiente' })
-            });
-        } else {
-            // Crea una nueva
-            await fetch(`${URL}/tareas`, {
-                method: 'POST',
-                headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
-                body: JSON.stringify({ nombre: nombre, turno: turno, estado: 'pendiente' })
-            });
-        }
-        
         document.getElementById('nombreTarea').value = '';
         cargarTareas();
     }
