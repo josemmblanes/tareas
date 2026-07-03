@@ -84,13 +84,17 @@
     </div>
 
     <div id="panelPrincipal" style="display:none;">
-        <h3 id="titulo">Mis Tareas</h3>
+        <h3 id="titulo" onclick="toggleTareas()" style="cursor:pointer; display:flex; justify-content:space-between;">
+            Mis Tareas <span>▼</span>
+        </h3>
         <div id="areaGestor" style="display:none;">
             <input type="text" id="nombreTarea" placeholder="Nueva tarea...">
             <select id="asignarA"><option>Alejandro</option><option>César</option></select>
             <button class="btn" style="background:#3b82f6" onclick="crearTarea()">Crear Tarea</button>
         </div>
-        <div id="lista"></div>
+        <div id="contenedorDesplegable" style="display:none;">
+            <div id="lista"></div>
+        </div>
         <button class="btn" style="background:#8b5cf6" onclick="verHistorial()">Ver Historial Completo</button>
         <button class="btn" style="background:#ef4444;" onclick="location.reload()">Cerrar sesión</button>
     </div>
@@ -101,11 +105,16 @@
     const KEY = 'sb_publishable_F5DJjPxXtl22rOV5RKowWA_Dxmg_UB3';
     let currentUser = "";
 
-    // Evita romper el filtro PostgREST y evita inyectar HTML/JS al insertar datos con innerHTML.
     function escaparHTML(valor) {
         const div = document.createElement('div');
         div.textContent = valor ?? '';
         return div.innerHTML;
+    }
+
+    // Nueva función para alternar visibilidad
+    function toggleTareas() {
+        const div = document.getElementById('contenedorDesplegable');
+        div.style.display = div.style.display === 'none' ? 'block' : 'none';
     }
 
     async function entrar() {
@@ -176,7 +185,6 @@
         asignarEventosLista();
     }
 
-    // Delegación de eventos: evita interpolar datos del usuario dentro de atributos onclick (frágil ante comillas e inyectable).
     function asignarEventosLista() {
         document.querySelectorAll('#lista [data-accion="marcarHecha"]').forEach(btn => {
             btn.addEventListener('click', () => marcarHecha(btn.dataset.id));
@@ -203,7 +211,6 @@
 
     async function verificar(id, turno, nombre) {
         try {
-            // 1. Guardar en historial con formato seguro
             const resHistorial = await fetch(`${URL}/historial`, {
                 method: 'POST',
                 headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}`, 'Content-Type': 'application/json' },
@@ -220,7 +227,6 @@
                 throw new Error(errorBody.message || "Error guardando historial");
             }
 
-            // 2. Reasignar la tarea automáticamente al otro usuario y volver a 'pendiente'
             const nuevoUsuario = obtenerOtroUsuario(turno);
             const resTarea = await fetch(`${URL}/tareas?id=eq.${id}`, {
                 method: 'PATCH',
@@ -246,7 +252,6 @@
             headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}` } 
         });
         const historial = await res.json();
-
         const coloresHistorial = ['#334155', '#3f3a52', '#2f4858', '#3a4a3f', '#4a3a4a', '#4a4030', '#2f3a52', '#43344a'];
 
         function colorPorTarea(nombreTarea) {
