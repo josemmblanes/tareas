@@ -2,6 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Asignador de Tareas</title>
     <style>
         * { box-sizing: border-box; }
@@ -15,65 +16,63 @@
             align-items: center;
             min-height: 100vh;
             margin: 0;
-            padding: 20px;
+            padding: 15px;
         }
         .card {
             background: #1e293b;
-            padding: 36px 32px;
+            padding: 24px 20px;
             border-radius: 18px;
             width: 100%;
             max-width: 400px;
             box-shadow: 0 20px 50px rgba(0,0,0,0.45), 0 0 0 1px rgba(148,163,184,0.08);
         }
         h3 {
-            margin: 0 0 24px 0;
-            font-size: 24px;
+            margin: 0 0 20px 0;
+            font-size: 20px;
             font-weight: 700;
-            letter-spacing: -0.3px;
         }
-        #loginPanel h3 {
-            text-align: center;
-        }
+        #loginPanel h3 { text-align: center; }
         select, input {
             width: 100%;
-            padding: 12px 14px;
+            padding: 14px;
             margin-top: 10px;
             border-radius: 8px;
             border: 1px solid #334155;
             background: #0f172a;
             color: #f1f5f9;
-            font-size: 14px;
+            font-size: 16px; /* Mejor legibilidad en móviles */
             outline: none;
-            transition: border-color 0.2s ease, box-shadow 0.2s ease;
         }
-        select:focus, input:focus {
-            border-color: #3b82f6;
-            box-shadow: 0 0 0 3px rgba(59,130,246,0.25);
-        }
-        select::-ms-expand { background: #0f172a; }
-        input::placeholder { color: #64748b; }
         .btn {
             width: 100%;
-            padding: 13px;
+            padding: 14px;
             border: none;
             border-radius: 8px;
             cursor: pointer;
             color: white;
-            margin-top: 18px;
+            margin-top: 15px;
             font-weight: 600;
-            font-size: 15px;
-            letter-spacing: 0.2px;
-            transition: transform 0.15s ease, filter 0.15s ease;
+            font-size: 16px;
         }
-        .btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
-        .btn:active { transform: translateY(0); filter: brightness(0.95); }
-        .tarea-item { background: #334155; padding: 12px; margin-bottom: 10px; border-radius: 8px; border-left: 4px solid #3b82f6; }
+        .tarea-item { 
+            background: #334155; 
+            padding: 15px; 
+            margin-bottom: 12px; 
+            border-radius: 8px; 
+            border-left: 4px solid #3b82f6; 
+            word-wrap: break-word;
+        }
+        /* Ajustes para móviles */
+        @media (max-width: 480px) {
+            .card { padding: 20px 15px; }
+            h1 { font-size: 24px !important; }
+        }
     </style>
 </head>
 <body>
 
-<div style="text-align:center; margin-bottom:18px;">
-    <h1 style="font-size:28px; font-weight:800; letter-spacing:-0.5px; margin:0; color:#f1f5f9;">Asignador de Tareas</h1>
+<div style="text-align:center; margin-bottom:15px;">
+    <h1 style="font-size:28px; font-weight:800; margin:0; color:#f1f5f9;">Asignador de Tareas</h1>
 </div>
 <div class="card">
     <div id="loginPanel">
@@ -101,7 +100,6 @@
     const KEY = 'sb_publishable_F5DJjPxXtl22rOV5RKowWA_Dxmg_UB3';
     let currentUser = "";
 
-    // Evita romper el filtro PostgREST y evita inyectar HTML/JS al insertar datos con innerHTML.
     function escaparHTML(valor) {
         const div = document.createElement('div');
         div.textContent = valor ?? '';
@@ -176,7 +174,6 @@
         asignarEventosLista();
     }
 
-    // Delegación de eventos: evita interpolar datos del usuario dentro de atributos onclick (frágil ante comillas e inyectable).
     function asignarEventosLista() {
         document.querySelectorAll('#lista [data-accion="marcarHecha"]').forEach(btn => {
             btn.addEventListener('click', () => marcarHecha(btn.dataset.id));
@@ -203,7 +200,6 @@
 
     async function verificar(id, turno, nombre) {
         try {
-            // 1. Guardar en historial con formato seguro
             const resHistorial = await fetch(`${URL}/historial`, {
                 method: 'POST',
                 headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}`, 'Content-Type': 'application/json' },
@@ -220,7 +216,6 @@
                 throw new Error(errorBody.message || "Error guardando historial");
             }
 
-            // 2. Reasignar la tarea automáticamente al otro usuario y volver a 'pendiente'
             const nuevoUsuario = obtenerOtroUsuario(turno);
             const resTarea = await fetch(`${URL}/tareas?id=eq.${id}`, {
                 method: 'PATCH',
@@ -246,7 +241,6 @@
             headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}` } 
         });
         const historial = await res.json();
-
         const coloresHistorial = ['#334155', '#3f3a52', '#2f4858', '#3a4a3f', '#4a3a4a', '#4a4030', '#2f3a52', '#43344a'];
 
         function colorPorTarea(nombreTarea) {
@@ -263,10 +257,9 @@
             : '';
         
         document.getElementById('lista').innerHTML = "<h3>Historial</h3>" + historial.map(t => `
-            <div class="tarea-item" style="background:${colorPorTarea(t.nombre_tarea)}; display:flex; justify-content:space-between; align-items:center; flex-wrap:nowrap; gap:8px; white-space:nowrap; overflow:hidden;">
-                <b style="overflow:hidden; text-overflow:ellipsis;">${escaparHTML(t.nombre_tarea || 'Sin nombre')}</b>
-                <span style="overflow:hidden; text-overflow:ellipsis;">Hecho por: ${escaparHTML(t.usuario || 'N/A')}</span>
-                <span>${t['fecha_verificación'] ? new Date(t['fecha_verificación']).toLocaleString() : 'Sin fecha'}</span>
+            <div class="tarea-item" style="background:${colorPorTarea(t.nombre_tarea)}; padding:10px;">
+                <b style="display:block;">${escaparHTML(t.nombre_tarea || 'Sin nombre')}</b>
+                <span style="font-size:12px;">Hecho por: ${escaparHTML(t.usuario || 'N/A')} | ${t['fecha_verificación'] ? new Date(t['fecha_verificación']).toLocaleDateString() : 'Sin fecha'}</span>
             </div>
         `).join('') + botonExportar + `<button class="btn" data-accion="volver">Volver</button>`;
 
@@ -286,7 +279,6 @@
             headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}` } 
         });
         const historial = await res.json();
-
         const encabezados = ['Tarea', 'Usuario', 'Fecha de verificación'];
         const filas = historial.map(t => [
             escaparCSV(t.nombre_tarea || 'Sin nombre'),
