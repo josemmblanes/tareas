@@ -2,6 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Asignador de Tareas</title>
     <style>
         * { box-sizing: border-box; }
@@ -42,7 +43,7 @@
             border: 1px solid #334155;
             background: #0f172a;
             color: #f1f5f9;
-            font-size: 14px;
+            font-size: 16px;
             outline: none;
             transition: border-color 0.2s ease, box-shadow 0.2s ease;
         }
@@ -63,11 +64,18 @@
             font-weight: 600;
             font-size: 15px;
             letter-spacing: 0.2px;
+            min-height: 44px;
             transition: transform 0.15s ease, filter 0.15s ease;
         }
         .btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
         .btn:active { transform: translateY(0); filter: brightness(0.95); }
         .tarea-item { background: #334155; padding: 12px; margin-bottom: 10px; border-radius: 8px; border-left: 4px solid #3b82f6; }
+
+        @media (max-width: 420px) {
+            body { padding: 12px; }
+            .card { padding: 24px 18px; }
+            h1 { font-size: 22px !important; }
+        }
     </style>
 </head>
 <body>
@@ -184,11 +192,11 @@
                         <b>${escaparHTML(t.nombre)}</b><br>
                         <span>Asignado: ${escaparHTML(t.turno)} | Estado: ${escaparHTML(t.estado)}</span><br>
                         ${t.estado === 'hecha' ? `<button class="btn" style="background:#f59e0b" data-accion="verificar" data-id="${t.id}" data-turno="${escaparHTML(t.turno)}" data-nombre="${escaparHTML(t.nombre)}">Verificar</button>` : ''}
-                        <div style="display:flex; gap:8px; margin-top:8px;">
-                            <select data-reasignar-select="${t.id}" style="margin-top:0;">
+                        <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
+                            <select data-reasignar-select="${t.id}" style="margin-top:0; flex:1; min-width:120px;">
                                 ${USUARIOS_ROTACION.map(u => `<option value="${u}" ${u === t.turno ? 'selected' : ''}>${u}</option>`).join('')}
                             </select>
-                            <button class="btn" style="background:#64748b; margin-top:0; width:auto; padding:10px 16px;" data-accion="reasignar" data-id="${t.id}">Reasignar</button>
+                            <button class="btn" style="background:#64748b; margin-top:0; width:auto; padding:10px 16px; flex-shrink:0;" data-accion="reasignar" data-id="${t.id}">Reasignar</button>
                         </div>
                     </div>
                 `).join('');
@@ -347,10 +355,10 @@
             : '';
         
         document.getElementById('lista').innerHTML = "<h3>Historial</h3>" + historial.map(t => `
-            <div class="tarea-item" style="background:${colorPorTarea(t.nombre_tarea)}; display:flex; justify-content:space-between; align-items:center; flex-wrap:nowrap; gap:8px; white-space:nowrap; overflow:hidden;">
-                <b style="overflow:hidden; text-overflow:ellipsis;">${escaparHTML(t.nombre_tarea || 'Sin nombre')}</b>
-                <span style="overflow:hidden; text-overflow:ellipsis;">Hecho por: ${escaparHTML(t.usuario || 'N/A')}</span>
-                <span>${t['fecha_verificación'] ? new Date(t['fecha_verificación']).toLocaleString() : 'Sin fecha'}</span>
+            <div class="tarea-item" style="background:${colorPorTarea(t.nombre_tarea)}; display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:4px 12px;">
+                <b style="flex:1 1 100%;">${escaparHTML(t.nombre_tarea || 'Sin nombre')}</b>
+                <span style="color:#cbd5e1; font-size:13px;">Hecho por: ${escaparHTML(t.usuario || 'N/A')}</span>
+                <span style="color:#94a3b8; font-size:13px;">${t['fecha_verificación'] ? new Date(t['fecha_verificación']).toLocaleString() : 'Sin fecha'}</span>
             </div>
         `).join('') + botonExportar + `<button class="btn" data-accion="volver">Volver</button>`;
 
