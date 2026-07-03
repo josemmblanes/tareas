@@ -111,8 +111,10 @@
     async function entrar() {
         const user = document.getElementById('user').value;
         const pass = document.getElementById('pass').value;
-        const res = await fetch(`${URL}/usuarios?nombre=eq.${encodeURIComponent(user)}&contrasena=eq.${encodeURIComponent(pass)}`, {
-            headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}` }
+        const res = await fetch(`${URL}/rpc/verificar_login`, {
+            method: 'POST',
+            headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ p_nombre: user, p_contrasena: pass })
         });
         const data = await res.json();
         if (data.length > 0) {
