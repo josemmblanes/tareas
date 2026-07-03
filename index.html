@@ -88,7 +88,7 @@
         <div id="areaGestor" style="display:none;">
             <input type="text" id="nombreTarea" placeholder="Nueva tarea...">
             <select id="asignarA"><option>Alejandro</option><option>César</option></select>
-            <button class="btn" style="background:#3b82f6" onclick="crearTarea()">Crear Tarea</button>
+            <button class="btn" style="background:#3b82f6" onclick="crearTarea()">Crear/Asignar Tarea</button>
         </div>
         <div id="lista"></div>
         <button class="btn" style="background:#8b5cf6" onclick="verHistorial()">Ver Historial Completo</button>
@@ -101,7 +101,6 @@
     const KEY = 'sb_publishable_F5DJjPxXtl22rOV5RKowWA_Dxmg_UB3';
     let currentUser = "";
 
-    // Evita romper el filtro PostgREST y evita inyectar HTML/JS al insertar datos con innerHTML.
     function escaparHTML(valor) {
         const div = document.createElement('div');
         div.textContent = valor ?? '';
@@ -148,35 +147,15 @@
         const pendientes = filtradas.filter(t => t.estado === 'pendiente');
         const porVerificar = filtradas.filter(t => t.estado === 'hecha');
 
-        const htmlPendientes = pendientes.length > 0
-            ? pendientes.map(t => `
-                <div class="tarea-item">
-                    <b>${escaparHTML(t.nombre)}</b><br>
-                    <span>Asignado: ${escaparHTML(t.turno)} | Estado: ${escaparHTML(t.estado)}</span><br>
-                    <button class="btn" style="background:#10b981" data-accion="marcarHecha" data-id="${t.id}">Hecha</button>
-                </div>
-            `).join('')
-            : `<p style="color:#94a3b8;">No tienes ninguna tarea pendiente.</p>`;
-
-        const htmlPorVerificar = porVerificar.length > 0
-            ? porVerificar.map(t => `
-                <div class="tarea-item">
-                    <b>${escaparHTML(t.nombre)}</b><br>
-                    <span>Asignado: ${escaparHTML(t.turno)} | Estado: ${escaparHTML(t.estado)}</span><br>
-                </div>
-            `).join('')
-            : `<p style="color:#94a3b8;">No tienes ninguna tarea por verificar.</p>`;
-
         document.getElementById('lista').innerHTML = `
             <h4>Tareas pendientes</h4>
-            ${htmlPendientes}
+            ${pendientes.length > 0 ? pendientes.map(t => `<div class="tarea-item"><b>${escaparHTML(t.nombre)}</b><br><button class="btn" style="background:#10b981" data-accion="marcarHecha" data-id="${t.id}">Hecha</button></div>`).join('') : '<p>Sin tareas</p>'}
             <h4 style="margin-top:20px;">Tareas por verificar</h4>
-            ${htmlPorVerificar}
+            ${porVerificar.length > 0 ? porVerificar.map(t => `<div class="tarea-item"><b>${escaparHTML(t.nombre)}</b></div>`).join('') : '<p>Ninguna</p>'}
         `;
         asignarEventosLista();
     }
 
-    // Delegación de eventos: evita interpolar datos del usuario dentro de atributos onclick (frágil ante comillas e inyectable).
     function asignarEventosLista() {
         document.querySelectorAll('#lista [data-accion="marcarHecha"]').forEach(btn => {
             btn.addEventListener('click', () => marcarHecha(btn.dataset.id));
@@ -195,131 +174,53 @@
         cargarTareas();
     }
 
-    const USUARIOS_ROTACION = ['Alejandro', 'César'];
-
-    function obtenerOtroUsuario(turnoActual) {
-        return USUARIOS_ROTACION.find(u => u !== turnoActual) || turnoActual;
-    }
-
-    async function verificar(id, turno, nombre) {
-        try {
-            // 1. Guardar en historial con formato seguro
-            const resHistorial = await fetch(`${URL}/historial`, {
-                method: 'POST',
-                headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    nombre_tarea: nombre, 
-                    usuario: turno, 
-                    "fecha_verificación": new Date().toISOString() 
-                })
-            });
-
-            if (!resHistorial.ok) {
-                const errorBody = await resHistorial.json();
-                console.error("Detalle Supabase (historial):", errorBody);
-                throw new Error(errorBody.message || "Error guardando historial");
-            }
-
-            // 2. Reasignar la tarea automáticamente al otro usuario y volver a 'pendiente'
-            const nuevoUsuario = obtenerOtroUsuario(turno);
-            const resTarea = await fetch(`${URL}/tareas?id=eq.${id}`, {
-                method: 'PATCH',
-                headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ estado: 'pendiente', turno: nuevoUsuario })
-            });
-            
-            if (!resTarea.ok) {
-                const errorBody = await resTarea.json();
-                console.error("Detalle Supabase (tareas):", errorBody);
-                throw new Error(errorBody.message || "Error actualizando tarea");
-            }
-            
-            cargarTareas();
-        } catch (e) {
-            console.error(e);
-            alert("Error al verificar. Revisa los permisos de la tabla historial.");
-        }
-    }
-
-    async function verHistorial() {
-        const res = await fetch(`${URL}/historial?select=*&order=fecha_verificaci%C3%B3n.desc`, { 
-            headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}` } 
-        });
-        const historial = await res.json();
-
-        const coloresHistorial = ['#334155', '#3f3a52', '#2f4858', '#3a4a3f', '#4a3a4a', '#4a4030', '#2f3a52', '#43344a'];
-
-        function colorPorTarea(nombreTarea) {
-            const str = nombreTarea || 'Sin nombre';
-            let hash = 0;
-            for (let i = 0; i < str.length; i++) {
-                hash = (hash * 31 + str.charCodeAt(i)) % 1000000;
-            }
-            return coloresHistorial[hash % coloresHistorial.length];
-        }
-        
-        const botonExportar = currentUser === 'Gestor'
-            ? `<button class="btn" style="background:#10b981" onclick="exportarHistorialCSV()">Exportar CSV</button>`
-            : '';
-        
-        document.getElementById('lista').innerHTML = "<h3>Historial</h3>" + historial.map(t => `
-            <div class="tarea-item" style="background:${colorPorTarea(t.nombre_tarea)}; display:flex; justify-content:space-between; align-items:center; flex-wrap:nowrap; gap:8px; white-space:nowrap; overflow:hidden;">
-                <b style="overflow:hidden; text-overflow:ellipsis;">${escaparHTML(t.nombre_tarea || 'Sin nombre')}</b>
-                <span style="overflow:hidden; text-overflow:ellipsis;">Hecho por: ${escaparHTML(t.usuario || 'N/A')}</span>
-                <span>${t['fecha_verificación'] ? new Date(t['fecha_verificación']).toLocaleString() : 'Sin fecha'}</span>
-            </div>
-        `).join('') + botonExportar + `<button class="btn" data-accion="volver">Volver</button>`;
-
-        document.querySelector('#lista [data-accion="volver"]')?.addEventListener('click', cargarTareas);
-    }
-
-    function escaparCSV(valor) {
-        const str = String(valor ?? '');
-        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-            return `"${str.replace(/"/g, '""')}"`;
-        }
-        return str;
-    }
-
-    async function exportarHistorialCSV() {
-        const res = await fetch(`${URL}/historial?select=*&order=fecha_verificaci%C3%B3n.desc`, { 
-            headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}` } 
-        });
-        const historial = await res.json();
-
-        const encabezados = ['Tarea', 'Usuario', 'Fecha de verificación'];
-        const filas = historial.map(t => [
-            escaparCSV(t.nombre_tarea || 'Sin nombre'),
-            escaparCSV(t.usuario || 'N/A'),
-            escaparCSV(t['fecha_verificación'] ? new Date(t['fecha_verificación']).toLocaleString() : 'Sin fecha')
-        ].join(','));
-
-        const csv = '\uFEFF' + [encabezados.join(','), ...filas].join('\n');
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-        const url = window.URL.createObjectURL(blob);
-        const enlace = document.createElement('a');
-        enlace.href = url;
-        enlace.download = `historial_${new Date().toISOString().slice(0,10)}.csv`;
-        document.body.appendChild(enlace);
-        enlace.click();
-        document.body.removeChild(enlace);
-        window.URL.revokeObjectURL(url);
-    }
-
     async function crearTarea() {
         const nombre = document.getElementById('nombreTarea').value.trim();
         const turno = document.getElementById('asignarA').value;
-        if (!nombre) {
-            alert("Escribe un nombre de tarea antes de crearla.");
-            return;
-        }
-        await fetch(`${URL}/tareas`, {
-            method: 'POST',
-            headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
-            body: JSON.stringify({ nombre: nombre, turno: turno, estado: 'pendiente' })
+        if (!nombre) return alert("Escribe un nombre de tarea.");
+
+        // Verificamos si ya existe la tarea por su nombre
+        const resExistente = await fetch(`${URL}/tareas?nombre=eq.${encodeURIComponent(nombre)}&select=id`, { 
+            headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}` } 
         });
+        const tareasExistentes = await resExistente.json();
+
+        if (tareasExistentes.length > 0) {
+            // Si existe, actualizamos la existente
+            await fetch(`${URL}/tareas?id=eq.${tareasExistentes[0].id}`, {
+                method: 'PATCH',
+                headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ turno: turno, estado: 'pendiente' })
+            });
+        } else {
+            // Si no existe, creamos nueva
+            await fetch(`${URL}/tareas`, {
+                method: 'POST',
+                headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nombre: nombre, turno: turno, estado: 'pendiente' })
+            });
+        }
         document.getElementById('nombreTarea').value = '';
         cargarTareas();
+    }
+
+    async function verificar(id, turno, nombre) {
+        await fetch(`${URL}/historial`, {
+            method: 'POST',
+            headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nombre_tarea: nombre, usuario: turno, "fecha_verificación": new Date().toISOString() })
+        });
+        await fetch(`${URL}/tareas?id=eq.${id}`, {
+            method: 'DELETE',
+            headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}` }
+        });
+        cargarTareas();
+    }
+
+    async function verHistorial() {
+        const res = await fetch(`${URL}/historial?select=*&order=fecha_verificaci%C3%B3n.desc`, { headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}` } });
+        const historial = await res.json();
+        document.getElementById('lista').innerHTML = "<h3>Historial</h3>" + historial.map(t => `<div class="tarea-item">${escaparHTML(t.nombre_tarea)} - ${t.usuario}</div>`).join('') + `<button class="btn" onclick="location.reload()">Volver</button>`;
     }
 </script>
 </body>
