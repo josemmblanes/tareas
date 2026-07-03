@@ -5,76 +5,16 @@
     <title>Asignador de Tareas</title>
     <style>
         * { box-sizing: border-box; }
-        body {
-            background: radial-gradient(circle at top, #1e293b 0%, #0f172a 60%);
-            color: #f1f5f9;
-            font-family: 'Segoe UI', Roboto, sans-serif;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            margin: 0;
-            padding: 20px;
-        }
-        .card {
-            background: #1e293b;
-            padding: 36px 32px;
-            border-radius: 18px;
-            width: 100%;
-            max-width: 400px;
-            box-shadow: 0 20px 50px rgba(0,0,0,0.45), 0 0 0 1px rgba(148,163,184,0.08);
-        }
-        h3 {
-            margin: 0 0 24px 0;
-            font-size: 24px;
-            font-weight: 700;
-            letter-spacing: -0.3px;
-        }
-        #loginPanel h3 {
-            text-align: center;
-        }
-        select, input {
-            width: 100%;
-            padding: 12px 14px;
-            margin-top: 10px;
-            border-radius: 8px;
-            border: 1px solid #334155;
-            background: #0f172a;
-            color: #f1f5f9;
-            font-size: 14px;
-            outline: none;
-            transition: border-color 0.2s ease, box-shadow 0.2s ease;
-        }
-        select:focus, input:focus {
-            border-color: #3b82f6;
-            box-shadow: 0 0 0 3px rgba(59,130,246,0.25);
-        }
-        select::-ms-expand { background: #0f172a; }
-        input::placeholder { color: #64748b; }
-        .btn {
-            width: 100%;
-            padding: 13px;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            color: white;
-            margin-top: 18px;
-            font-weight: 600;
-            font-size: 15px;
-            letter-spacing: 0.2px;
-            transition: transform 0.15s ease, filter 0.15s ease;
-        }
-        .btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
-        .btn:active { transform: translateY(0); filter: brightness(0.95); }
-        .tarea-item { background: #334155; padding: 12px; margin-bottom: 10px; border-radius: 8px; border-left: 4px solid #3b82f6; }
+        body { background: radial-gradient(circle at top, #1e293b 0%, #0f172a 60%); color: #f1f5f9; font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; }
+        .card { background: #1e293b; padding: 36px 32px; border-radius: 18px; width: 100%; max-width: 400px; box-shadow: 0 20px 50px rgba(0,0,0,0.45); }
+        select, input { width: 100%; padding: 12px; margin-top: 10px; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: #f1f5f9; }
+        .btn { width: 100%; padding: 13px; border: none; border-radius: 8px; cursor: pointer; color: white; margin-top: 18px; font-weight: 600; }
+        .btn:hover { filter: brightness(1.1); }
+        .tarea-item { background: #334155; padding: 12px; margin-top: 10px; border-radius: 8px; border-left: 4px solid #3b82f6; }
     </style>
 </head>
 <body>
 
-<div style="text-align:center; margin-bottom:18px;">
-    <h1 style="font-size:28px; font-weight:800; letter-spacing:-0.5px; margin:0; color:#f1f5f9;">Asignador de Tareas</h1>
-</div>
 <div class="card">
     <div id="loginPanel">
         <h3>Iniciar Sesión</h3>
@@ -84,14 +24,14 @@
     </div>
 
     <div id="panelPrincipal" style="display:none;">
-        <h3 id="titulo">Mis Tareas</h3>
+        <h3>Administrar Tareas</h3>
         <div id="areaGestor" style="display:none;">
             <input type="text" id="nombreTarea" placeholder="Nueva tarea...">
             <select id="asignarA"><option>Alejandro</option><option>César</option></select>
-            <button class="btn" style="background:#3b82f6" onclick="crearTarea()">Crear/Asignar Tarea</button>
+            <button class="btn" style="background:#3b82f6" onclick="crearTarea()">Crear/Asignar</button>
+            <hr style="border:0; border-top:1px solid #334155; margin: 20px 0;">
         </div>
         <div id="lista"></div>
-        <button class="btn" style="background:#8b5cf6" onclick="verHistorial()">Ver Historial Completo</button>
         <button class="btn" style="background:#ef4444;" onclick="location.reload()">Cerrar sesión</button>
     </div>
 </div>
@@ -100,12 +40,6 @@
     const URL = 'https://abliexzdcfpvjairjraj.supabase.co/rest/v1';
     const KEY = 'sb_publishable_F5DJjPxXtl22rOV5RKowWA_Dxmg_UB3';
     let currentUser = "";
-
-    function escaparHTML(valor) {
-        const div = document.createElement('div');
-        div.textContent = valor ?? '';
-        return div.innerHTML;
-    }
 
     async function entrar() {
         const user = document.getElementById('user').value;
@@ -128,99 +62,30 @@
     async function cargarTareas() {
         const res = await fetch(`${URL}/tareas?select=*`, { headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}` } });
         const tareas = await res.json();
-        const filtradas = currentUser === 'Gestor' ? tareas : tareas.filter(t => t.turno === currentUser);
+        
+        // Si es gestor, mostramos todas las tareas, si no, solo las suyas
+        const mostrar = currentUser === 'Gestor' ? tareas : tareas.filter(t => t.turno === currentUser);
 
-        if (currentUser === 'Gestor') {
-            document.getElementById('lista').innerHTML = filtradas
-                .filter(t => t.estado !== 'verificada')
-                .map(t => `
-                    <div class="tarea-item">
-                        <b>${escaparHTML(t.nombre)}</b><br>
-                        <span>Asignado: ${escaparHTML(t.turno)} | Estado: ${escaparHTML(t.estado)}</span><br>
-                        ${t.estado === 'hecha' ? `<button class="btn" style="background:#f59e0b" data-accion="verificar" data-id="${t.id}" data-turno="${escaparHTML(t.turno)}" data-nombre="${escaparHTML(t.nombre)}">Verificar</button>` : ''}
-                    </div>
-                `).join('');
-            asignarEventosLista();
-            return;
-        }
-
-        const pendientes = filtradas.filter(t => t.estado === 'pendiente');
-        const porVerificar = filtradas.filter(t => t.estado === 'hecha');
-
-        document.getElementById('lista').innerHTML = `
-            <h4>Tareas pendientes</h4>
-            ${pendientes.length > 0 ? pendientes.map(t => `<div class="tarea-item"><b>${escaparHTML(t.nombre)}</b><br><button class="btn" style="background:#10b981" data-accion="marcarHecha" data-id="${t.id}">Hecha</button></div>`).join('') : '<p>Sin tareas</p>'}
-            <h4 style="margin-top:20px;">Tareas por verificar</h4>
-            ${porVerificar.length > 0 ? porVerificar.map(t => `<div class="tarea-item"><b>${escaparHTML(t.nombre)}</b></div>`).join('') : '<p>Ninguna</p>'}
-        `;
-        asignarEventosLista();
-    }
-
-    function asignarEventosLista() {
-        document.querySelectorAll('#lista [data-accion="marcarHecha"]').forEach(btn => {
-            btn.addEventListener('click', () => marcarHecha(btn.dataset.id));
-        });
-        document.querySelectorAll('#lista [data-accion="verificar"]').forEach(btn => {
-            btn.addEventListener('click', () => verificar(btn.dataset.id, btn.dataset.turno, btn.dataset.nombre));
-        });
-    }
-
-    async function marcarHecha(id) {
-        await fetch(`${URL}/tareas?id=eq.${id}`, {
-            method: 'PATCH',
-            headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
-            body: JSON.stringify({ estado: 'hecha' })
-        });
-        cargarTareas();
+        document.getElementById('lista').innerHTML = mostrar.map(t => `
+            <div class="tarea-item">
+                <b>${t.nombre}</b><br>
+                <small>Asignado a: ${t.turno} | Estado: ${t.estado}</small>
+            </div>
+        `).join('');
     }
 
     async function crearTarea() {
         const nombre = document.getElementById('nombreTarea').value.trim();
         const turno = document.getElementById('asignarA').value;
-        if (!nombre) return alert("Escribe un nombre de tarea.");
+        if (!nombre) return;
 
-        // Verificamos si ya existe la tarea por su nombre
-        const resExistente = await fetch(`${URL}/tareas?nombre=eq.${encodeURIComponent(nombre)}&select=id`, { 
-            headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}` } 
-        });
-        const tareasExistentes = await resExistente.json();
-
-        if (tareasExistentes.length > 0) {
-            // Si existe, actualizamos la existente
-            await fetch(`${URL}/tareas?id=eq.${tareasExistentes[0].id}`, {
-                method: 'PATCH',
-                headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ turno: turno, estado: 'pendiente' })
-            });
-        } else {
-            // Si no existe, creamos nueva
-            await fetch(`${URL}/tareas`, {
-                method: 'POST',
-                headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ nombre: nombre, turno: turno, estado: 'pendiente' })
-            });
-        }
-        document.getElementById('nombreTarea').value = '';
-        cargarTareas();
-    }
-
-    async function verificar(id, turno, nombre) {
-        await fetch(`${URL}/historial`, {
+        await fetch(`${URL}/tareas`, {
             method: 'POST',
             headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nombre_tarea: nombre, usuario: turno, "fecha_verificación": new Date().toISOString() })
+            body: JSON.stringify({ nombre, turno, estado: 'pendiente' })
         });
-        await fetch(`${URL}/tareas?id=eq.${id}`, {
-            method: 'DELETE',
-            headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}` }
-        });
+        document.getElementById('nombreTarea').value = '';
         cargarTareas();
-    }
-
-    async function verHistorial() {
-        const res = await fetch(`${URL}/historial?select=*&order=fecha_verificaci%C3%B3n.desc`, { headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}` } });
-        const historial = await res.json();
-        document.getElementById('lista').innerHTML = "<h3>Historial</h3>" + historial.map(t => `<div class="tarea-item">${escaparHTML(t.nombre_tarea)} - ${t.usuario}</div>`).join('') + `<button class="btn" onclick="location.reload()">Volver</button>`;
     }
 </script>
 </body>
