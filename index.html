@@ -2,7 +2,6 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Asignador de Tareas</title>
     <style>
         * { box-sizing: border-box; }
@@ -43,7 +42,7 @@
             border: 1px solid #334155;
             background: #0f172a;
             color: #f1f5f9;
-            font-size: 16px;
+            font-size: 14px;
             outline: none;
             transition: border-color 0.2s ease, box-shadow 0.2s ease;
         }
@@ -64,18 +63,11 @@
             font-weight: 600;
             font-size: 15px;
             letter-spacing: 0.2px;
-            min-height: 44px;
             transition: transform 0.15s ease, filter 0.15s ease;
         }
         .btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
         .btn:active { transform: translateY(0); filter: brightness(0.95); }
         .tarea-item { background: #334155; padding: 12px; margin-bottom: 10px; border-radius: 8px; border-left: 4px solid #3b82f6; }
-
-        @media (max-width: 420px) {
-            body { padding: 12px; }
-            .card { padding: 24px 18px; }
-            h1 { font-size: 22px !important; }
-        }
     </style>
 </head>
 <body>
@@ -116,46 +108,14 @@
         return div.innerHTML;
     }
 
-    // Helper reutilizable: centraliza el manejo de fallos de red y de respuestas HTTP no-OK,
-    // para que ninguna acción falle en silencio. Devuelve null si algo fue mal (ya alertado al usuario).
-    async function peticionSegura(url, opciones, mensajeErrorUsuario) {
-        let res;
-        try {
-            res = await fetch(url, opciones);
-        } catch (e) {
-            console.error(mensajeErrorUsuario, e);
-            alert("No se pudo conectar con el servidor. Revisa tu conexión.");
-            return null;
-        }
-        if (!res.ok) {
-            const errorBody = await res.json().catch(() => ({}));
-            console.error(mensajeErrorUsuario, errorBody);
-            return { res, errorBody };
-        }
-        return { res, errorBody: null };
-    }
-
     async function entrar() {
         const user = document.getElementById('user').value;
         const pass = document.getElementById('pass').value;
-        let res;
-        try {
-            res = await fetch(`${URL}/rpc/verificar_login`, {
-                method: 'POST',
-                headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ p_nombre: user, p_contrasena: pass })
-            });
-        } catch (e) {
-            console.error("Error de red en entrar():", e);
-            alert("No se pudo conectar con el servidor. Revisa tu conexión.");
-            return;
-        }
-        if (!res.ok) {
-            const errorBody = await res.json().catch(() => ({}));
-            console.error("Error del servidor en entrar():", errorBody);
-            alert("Error del servidor al iniciar sesión. Inténtalo de nuevo.");
-            return;
-        }
+        const res = await fetch(`${URL}/rpc/verificar_login`, {
+            method: 'POST',
+            headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ p_nombre: user, p_contrasena: pass })
+        });
         const data = await res.json();
         if (data.length > 0) {
             currentUser = user;
@@ -167,20 +127,7 @@
     }
 
     async function cargarTareas() {
-        let res;
-        try {
-            res = await fetch(`${URL}/tareas?select=*`, { headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}` } });
-        } catch (e) {
-            console.error("Error de red en cargarTareas():", e);
-            document.getElementById('lista').innerHTML = `<p style="color:#f87171;">No se pudo conectar con el servidor. Comprueba tu conexión y recarga.</p>`;
-            return;
-        }
-        if (!res.ok) {
-            const errorBody = await res.json().catch(() => ({}));
-            console.error("Error del servidor en cargarTareas():", errorBody);
-            document.getElementById('lista').innerHTML = `<p style="color:#f87171;">Error al cargar las tareas. Revisa la consola.</p>`;
-            return;
-        }
+        const res = await fetch(`${URL}/tareas?select=*`, { headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}` } });
         const tareas = await res.json();
         const filtradas = currentUser === 'Gestor' ? tareas : tareas.filter(t => t.turno === currentUser);
 
@@ -192,11 +139,11 @@
                         <b>${escaparHTML(t.nombre)}</b><br>
                         <span>Asignado: ${escaparHTML(t.turno)} | Estado: ${escaparHTML(t.estado)}</span><br>
                         ${t.estado === 'hecha' ? `<button class="btn" style="background:#f59e0b" data-accion="verificar" data-id="${t.id}" data-turno="${escaparHTML(t.turno)}" data-nombre="${escaparHTML(t.nombre)}">Verificar</button>` : ''}
-                        <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
-                            <select data-reasignar-select="${t.id}" style="margin-top:0; flex:1; min-width:120px;">
+                        <div style="display:flex; gap:8px; margin-top:8px;">
+                            <select data-reasignar-select="${t.id}" style="margin-top:0;">
                                 ${USUARIOS_ROTACION.map(u => `<option value="${u}" ${u === t.turno ? 'selected' : ''}>${u}</option>`).join('')}
                             </select>
-                            <button class="btn" style="background:#64748b; margin-top:0; width:auto; padding:10px 16px; flex-shrink:0;" data-accion="reasignar" data-id="${t.id}">Reasignar</button>
+                            <button class="btn" style="background:#64748b; margin-top:0; width:auto; padding:10px 16px;" data-accion="reasignar" data-id="${t.id}">Reasignar</button>
                         </div>
                     </div>
                 `).join('');
@@ -255,30 +202,20 @@
     // Al reasignar, la tarea vuelve a 'pendiente': el nuevo usuario no ha hecho nada todavía,
     // así que no tendría sentido que apareciera como 'hecha' en su lista.
     async function reasignarTarea(id, nuevoTurno) {
-        const resultado = await peticionSegura(`${URL}/tareas?id=eq.${id}`, {
+        await fetch(`${URL}/tareas?id=eq.${id}`, {
             method: 'PATCH',
             headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ turno: nuevoTurno, estado: 'pendiente' })
-        }, "Error reasignando tarea:");
-        if (!resultado) return;
-        if (resultado.errorBody) {
-            alert("No se pudo reasignar la tarea. Revisa la consola.");
-            return;
-        }
+        });
         cargarTareas();
     }
 
     async function marcarHecha(id) {
-        const resultado = await peticionSegura(`${URL}/tareas?id=eq.${id}`, {
+        await fetch(`${URL}/tareas?id=eq.${id}`, {
             method: 'PATCH',
             headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
             body: JSON.stringify({ estado: 'hecha' })
-        }, "Error marcando tarea como hecha:");
-        if (!resultado) return;
-        if (resultado.errorBody) {
-            alert("No se pudo marcar la tarea como hecha. Revisa la consola.");
-            return;
-        }
+        });
         cargarTareas();
     }
 
@@ -329,15 +266,10 @@
     }
 
     async function verHistorial() {
-        const resultado = await peticionSegura(`${URL}/historial?select=*&order=fecha_verificaci%C3%B3n.desc`, {
-            headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}` }
-        }, "Error cargando historial:");
-        if (!resultado) return;
-        if (resultado.errorBody) {
-            alert("No se pudo cargar el historial. Revisa la consola.");
-            return;
-        }
-        const historial = await resultado.res.json();
+        const res = await fetch(`${URL}/historial?select=*&order=fecha_verificaci%C3%B3n.desc`, { 
+            headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}` } 
+        });
+        const historial = await res.json();
 
         const coloresHistorial = ['#334155', '#3f3a52', '#2f4858', '#3a4a3f', '#4a3a4a', '#4a4030', '#2f3a52', '#43344a'];
 
@@ -355,10 +287,10 @@
             : '';
         
         document.getElementById('lista').innerHTML = "<h3>Historial</h3>" + historial.map(t => `
-            <div class="tarea-item" style="background:${colorPorTarea(t.nombre_tarea)}; display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:4px 12px;">
-                <b style="flex:1 1 100%;">${escaparHTML(t.nombre_tarea || 'Sin nombre')}</b>
-                <span style="color:#cbd5e1; font-size:13px;">Hecho por: ${escaparHTML(t.usuario || 'N/A')}</span>
-                <span style="color:#94a3b8; font-size:13px;">${t['fecha_verificación'] ? new Date(t['fecha_verificación']).toLocaleString() : 'Sin fecha'}</span>
+            <div class="tarea-item" style="background:${colorPorTarea(t.nombre_tarea)}; display:flex; justify-content:space-between; align-items:center; flex-wrap:nowrap; gap:8px; white-space:nowrap; overflow:hidden;">
+                <b style="overflow:hidden; text-overflow:ellipsis;">${escaparHTML(t.nombre_tarea || 'Sin nombre')}</b>
+                <span style="overflow:hidden; text-overflow:ellipsis;">Hecho por: ${escaparHTML(t.usuario || 'N/A')}</span>
+                <span>${t['fecha_verificación'] ? new Date(t['fecha_verificación']).toLocaleString() : 'Sin fecha'}</span>
             </div>
         `).join('') + botonExportar + `<button class="btn" data-accion="volver">Volver</button>`;
 
@@ -374,15 +306,10 @@
     }
 
     async function exportarHistorialCSV() {
-        const resultado = await peticionSegura(`${URL}/historial?select=*&order=fecha_verificaci%C3%B3n.desc`, {
-            headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}` }
-        }, "Error exportando historial:");
-        if (!resultado) return;
-        if (resultado.errorBody) {
-            alert("No se pudo exportar el historial. Revisa la consola.");
-            return;
-        }
-        const historial = await resultado.res.json();
+        const res = await fetch(`${URL}/historial?select=*&order=fecha_verificaci%C3%B3n.desc`, { 
+            headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}` } 
+        });
+        const historial = await res.json();
 
         const encabezados = ['Tarea', 'Usuario', 'Fecha de verificación'];
         const filas = historial.map(t => [
@@ -410,44 +337,11 @@
             alert("Escribe un nombre de tarea antes de crearla.");
             return;
         }
-
-        // Comprobación previa: solo mejora la experiencia (mensaje claro con contexto).
-        // NO es la garantía real contra duplicados — eso lo da el índice único
-        // en Supabase (tareas_nombre_unique_idx). Sin él, dos clics rápidos o dos
-        // sesiones del Gestor podrían crear el duplicado igualmente antes de este check.
-        const chequeo = await peticionSegura(
-            `${URL}/tareas?nombre=ilike.${encodeURIComponent(nombre)}&select=id,turno,estado`,
-            { headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}` } },
-            "Error comprobando si la tarea ya existe:"
-        );
-        if (!chequeo) return;
-        if (chequeo.errorBody) {
-            alert("No se pudo comprobar si la tarea ya existe. Inténtalo de nuevo.");
-            return;
-        }
-        const existentes = await chequeo.res.json();
-        if (existentes.length > 0) {
-            const t = existentes[0];
-            alert(`Ya existe una tarea llamada "${nombre}". Está asignada a ${t.turno} (estado: ${t.estado}).`);
-            return;
-        }
-
-        const creacion = await peticionSegura(`${URL}/tareas`, {
+        await fetch(`${URL}/tareas`, {
             method: 'POST',
             headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
             body: JSON.stringify({ nombre: nombre, turno: turno, estado: 'pendiente' })
-        }, "Error creando tarea:");
-        if (!creacion) return;
-        if (creacion.errorBody) {
-            // 23505 = violación del índice único (respaldo real ante condiciones de carrera).
-            if (creacion.errorBody.code === '23505') {
-                alert(`Ya existe una tarea llamada "${nombre}" (creada justo ahora por otra sesión).`);
-            } else {
-                alert("No se pudo crear la tarea. Revisa la consola para más detalles.");
-            }
-            return;
-        }
-
+        });
         document.getElementById('nombreTarea').value = '';
         cargarTareas();
     }
