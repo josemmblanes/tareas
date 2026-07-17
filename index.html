@@ -2,6 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
     <title>Asignador de Tareas</title>
     <style>
         * { box-sizing: border-box; }
@@ -265,36 +266,156 @@
         }
     }
 
-    async function verHistorial() {
-        const res = await fetch(`${URL}/historial?select=*&order=fecha_verificaci%C3%B3n.desc`, { 
-            headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}` } 
-        });
-        const historial = await res.json();
+    const coloresHistorial = ['#334155', '#3f3a52', '#2f4858', '#3a4a3f', '#4a3a4a', '#4a4030', '#2f3a52', '#43344a'];
 
-        const coloresHistorial = ['#334155', '#3f3a52', '#2f4858', '#3a4a3f', '#4a3a4a', '#4a4030', '#2f3a52', '#43344a'];
-
-        function colorPorTarea(nombreTarea) {
-            const str = nombreTarea || 'Sin nombre';
-            let hash = 0;
-            for (let i = 0; i < str.length; i++) {
-                hash = (hash * 31 + str.charCodeAt(i)) % 1000000;
-            }
-            return coloresHistorial[hash % coloresHistorial.length];
+    function colorPorTarea(nombreTarea) {
+        const str = nombreTarea || 'Sin nombre';
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            hash = (hash * 31 + str.charCodeAt(i)) % 1000000;
         }
-        
-        const botonExportar = currentUser === 'Gestor'
-            ? `<button class="btn" style="background:#10b981" onclick="exportarHistorialCSV()">Exportar CSV</button>`
-            : '';
-        
-        document.getElementById('lista').innerHTML = "<h3>Historial</h3>" + historial.map(t => `
+        return coloresHistorial[hash % coloresHistorial.length];
+    }
+
+    // Cache simple para no repetir la petición al cambiar de vista dentro del historial.
+    let historialCache = null;
+
+    async function obtenerHistorial() {
+        if (historialCache) return historialCache;
+        const res = await fetch(`${URL}/historial?select=*&order=fecha_verificaci%C3%B3n.desc`, {
+            headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}` }
+        });
+        historialCache = await res.json();
+        return historialCache;
+    }
+
+    function obtenerTareasUnicas(historial) {
+        return [...new Set(historial.map(t => t.nombre_tarea || 'Sin nombre'))];
+    }
+
+    function obtenerUsuariosUnicos(historial) {
+        return [...new Set(historial.map(t => t.usuario || 'N/A'))];
+    }
+
+    function renderHistorialLista(historial) {
+        if (historial.length === 0) return `<p style="color:#94a3b8;">No hay registros en el historial.</p>`;
+        return historial.map(t => `
             <div class="tarea-item" style="background:${colorPorTarea(t.nombre_tarea)}; display:flex; justify-content:space-between; align-items:center; flex-wrap:nowrap; gap:8px; white-space:nowrap; overflow:hidden;">
                 <b style="overflow:hidden; text-overflow:ellipsis;">${escaparHTML(t.nombre_tarea || 'Sin nombre')}</b>
                 <span style="overflow:hidden; text-overflow:ellipsis;">Hecho por: ${escaparHTML(t.usuario || 'N/A')}</span>
                 <span>${t['fecha_verificación'] ? new Date(t['fecha_verificación']).toLocaleString() : 'Sin fecha'}</span>
             </div>
-        `).join('') + botonExportar + `<button class="btn" data-accion="volver">Volver</button>`;
+        `).join('');
+    }
 
-        document.querySelector('#lista [data-accion="volver"]')?.addEventListener('click', cargarTareas);
+    // Comparativa: elige una tarea concreta y muestra cuántas veces la ha hecho cada usuario.
+    function renderHistorialComparativa(historial, tareaSel) {
+        const tareas = obtenerTareasUnicas(historial);
+        if (tareas.length === 0) return `<p style="color:#94a3b8;">No hay registros en el historial.</p>`;
+        const tarea = (tareaSel && tareas.includes(tareaSel)) ? tareaSel : tareas[0];
+        const usuarios = obtenerUsuariosUnicos(historial);
+
+        const conteos = {};
+        usuarios.forEach(u => conteos[u] = 0);
+        historial.forEach(t => {
+            if ((t.nombre_tarea || 'Sin nombre') === tarea) {
+                const u = t.usuario || 'N/A';
+                conteos[u] = (conteos[u] || 0) + 1;
+            }
+        });
+        const maxConteo = Math.max(1, ...usuarios.map(u => conteos[u] || 0));
+
+        const selectorTareas = `
+            <select data-comparativa-tarea>
+                ${tareas.map(t => `<option value="${escaparHTML(t)}" ${t === tarea ? 'selected' : ''}>${escaparHTML(t)}</option>`).join('')}
+            </select>
+        `;
+
+        const barras = usuarios.map(u => {
+            const veces = conteos[u] || 0;
+            const anchoPct = Math.round((veces / maxConteo) * 100);
+            return `
+                <div style="margin-top:14px;">
+                    <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:4px;">
+                        <span>${escaparHTML(u)}</span><span>${veces} ${veces === 1 ? 'vez' : 'veces'}</span>
+                    </div>
+                    <div style="background:#0f172a; border-radius:6px; overflow:hidden; height:14px;">
+                        <div style="background:#3b82f6; width:${anchoPct}%; height:100%;"></div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        return `<div class="tarea-item">${selectorTareas}${barras}</div>`;
+    }
+
+    // Tabla: filas = tareas, columnas = usuarios, celda = número de veces que ese usuario la ha hecho.
+    function renderHistorialTabla(historial) {
+        const tareas = obtenerTareasUnicas(historial);
+        const usuarios = obtenerUsuariosUnicos(historial);
+        if (tareas.length === 0) return `<p style="color:#94a3b8;">No hay registros en el historial.</p>`;
+
+        const cabeceras = usuarios.map(u => `<th style="padding:8px; text-align:center; border-bottom:2px solid #3b82f6;">${escaparHTML(u)}</th>`).join('');
+        const filas = tareas.map(tarea => {
+            const celdas = usuarios.map(u => {
+                const veces = historial.filter(t => (t.nombre_tarea || 'Sin nombre') === tarea && (t.usuario || 'N/A') === u).length;
+                return `<td style="padding:8px; text-align:center; border-bottom:1px solid #334155;">${veces}</td>`;
+            }).join('');
+            return `<tr><td style="padding:8px; border-bottom:1px solid #334155; font-weight:600;">${escaparHTML(tarea)}</td>${celdas}</tr>`;
+        }).join('');
+
+        return `
+            <div style="overflow-x:auto;">
+                <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                    <thead><tr><th style="padding:8px; text-align:left; border-bottom:2px solid #3b82f6;">Tarea</th>${cabeceras}</tr></thead>
+                    <tbody>${filas}</tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    async function verHistorial(modo = 'lista', tareaSel = null) {
+        const historial = await obtenerHistorial();
+
+        const pestana = (valor, etiqueta) => `
+            <button class="btn" style="background:${modo === valor ? '#3b82f6' : '#334155'}; margin-top:0; width:auto; padding:8px 14px; font-size:13px;" data-modo="${valor}">${etiqueta}</button>
+        `;
+        const tabs = `
+            <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;">
+                ${pestana('lista', 'Lista')}
+                ${pestana('comparativa', 'Comparativa por tarea')}
+                ${pestana('tabla', 'Tabla por tarea')}
+            </div>
+        `;
+
+        let contenido = '';
+        if (modo === 'comparativa') {
+            contenido = renderHistorialComparativa(historial, tareaSel);
+        } else if (modo === 'tabla') {
+            contenido = renderHistorialTabla(historial);
+        } else {
+            modo = 'lista';
+            contenido = renderHistorialLista(historial);
+        }
+
+        const botonExportar = (currentUser === 'Gestor' && modo === 'lista')
+            ? `<button class="btn" style="background:#10b981" onclick="exportarHistorialCSV()">Exportar CSV</button>`
+            : '';
+
+        document.getElementById('lista').innerHTML = "<h3>Historial</h3>" + tabs + contenido + botonExportar + `<button class="btn" data-accion="volver">Volver</button>`;
+
+        document.querySelectorAll('#lista [data-modo]').forEach(btn => {
+            btn.addEventListener('click', () => verHistorial(btn.dataset.modo));
+        });
+
+        document.querySelector('#lista [data-comparativa-tarea]')?.addEventListener('change', (e) => {
+            verHistorial('comparativa', e.target.value);
+        });
+
+        document.querySelector('#lista [data-accion="volver"]')?.addEventListener('click', () => {
+            historialCache = null;
+            cargarTareas();
+        });
     }
 
     function escaparCSV(valor) {
